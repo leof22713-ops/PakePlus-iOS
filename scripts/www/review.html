@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>复习</title>
+  <link rel="stylesheet" href="css/style.css?v=9">
+</head>
+<body class="page-bg review-page">
+
+  <header class="review-header">
+    <a class="back-link" href="index.html">← 返回主页</a>
+    <span class="mode-tag" id="modeTag">中文 → 英文</span>
+  </header>
+
+  <main class="review-main" id="reviewMain">
+    <section class="glass-block review-card">
+      <div class="card-label" id="qLabel">中文</div>
+      <div class="card-word" id="qWord">…</div>
+    </section>
+
+    <section class="glass-block review-card hidden" id="answerCard">
+      <div class="card-label" id="aLabel">英文</div>
+      <div class="card-word answer" id="aWord">…</div>
+    </section>
+
+    <section class="review-actions" id="rateActions">
+      <button class="act-btn act-know" data-rate="know">认识</button>
+      <button class="act-btn act-vague" data-rate="vague">模糊</button>
+      <button class="act-btn act-forget" data-rate="forget">忘记</button>
+    </section>
+
+    <section class="review-actions next-row hidden" id="nextActions">
+      <button class="act-btn act-next" id="nextBtn">下一个</button>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="js/db.js"></script>
+  <script>
+    const params = new URLSearchParams(location.search);
+    function resolveMode() {
+      let m = params.get('mode');
+      if (m !== 'en2zh' && m !== 'zh2en') {
+        try { m = sessionStorage.getItem('reviewMode'); } catch (e) { m = null; }
+      }
+      return (m === 'en2zh') ? 'en2zh' : 'zh2en';
+    }
+    const mode = resolveMode();
+
+    const qLabel = document.getElementById('qLabel');
+    const aLabel = document.getElementById('aLabel');
+    const qWord = document.getElementById("qWord");
+    const aWord = document.getElementById('aWord');
+    const modeTag = document.getElementById('modeTag');
+    const toastEl = document.getElementById('toast');
+    const answerCard = document.getElementById('answerCard');
+    const rateActions = document.getElementById('rateActions');
+    const nextActions = document.getElementById('nextActions');
+    const nextBtn = document.getElementById('nextBtn');
+
+    let current = null;
+
+    function showAskState() {
+      answerCard.classList.add('hidden');
+      rateActions.classList.remove('hidden');
+      nextActions.classList.add('hidden');
+    }
+
+    function showAnswerState() {
+      answerCard.classList.remove('hidden');
+      rateActions.classList.add('hidden');
+      nextActions.classList.remove('hidden');
+    }
+
+    function applyMode() {
+      if (mode === 'zh2en') {
+        modeTag.textContent = '中文 → 英文';
+        qLabel.textContent = '中文';
+        aLabel.textContent = '英文';
+      } else {
+        modeTag.textContent = '英文 → 中文';
+        qLabel.textContent = '英文';
+        aLabel.textContent = '中文';
+      }
+    }
+
+    function showToast(msg) {
+      toastEl.textContent = msg;
+      toastEl.classList.add('show');
+      clearTimeout(showToast.timer);
+      showToast.timer = setTimeout(() => toastEl.classList.remove('show'), 1600);
+    }
+
+    // ===== 评价按钮 =====
+    function rate(kind) {
+      if (!current) return;
+      
+      // 更新数据并重新计算下一次的时间
+      AppDB.updateStudy(current.id, kind);
+      
+      // 露出答案，等待用户点“下一个”
+      showAnswerState();
+    }
+
+    document.querySelectorAll('[data-rate]').forEach(btn => {
+      btn.addEventListener('click', () => rate(btn.dataset.rate));
+    });
+
+    nextBtn.addEventListener('click', () => {
+      showAskState();
+      loadOne();
+    });
+
+    // ===== 加载单条数据 =====
+    function loadOne() {
+      // 直接调用 db.js 的取词逻辑
+      const row = AppDB.getReviewWord();
+      
+      if (!row) {
+        current = null;
+        qWord.textContent = '暂无需要复习的单词';
+        aWord.textContent = '今天休息一下吧！';
+        // 隐藏操作按钮
+        rateActions.classList.add('hidden');
+        nextActions.classList.add('hidden');
+        return;
+      }
+
+      current = row;
+
+      if (mode === 'zh2en') {
+        qWord.textContent = current.chi || '（空）';
+        aWord.textContent = current.eng || '（空）';
+      } else {
+        qWord.textContent = current.eng || '（空）';
+        aWord.textContent = current.chi || '（空）';
+      }
+    }
+
+    // 初始化
+    (async function init() {
+      applyMode();
+      showAskState();
+      try {
+        await AppDB.init();
+        loadOne();
+      } catch (e) {
+        qWord.textContent = '初始化失败';
+        aWord.textContent = e.message;
+        console.error(e);
+      }
+    })();
+  </script>
+</body>
+</html>
