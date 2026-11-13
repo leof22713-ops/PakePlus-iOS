@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>我的单词书</title>
+  <link rel="stylesheet" href="css/style.css?v=8">
+</head>
+<body class="home-page">
+
+  <header class="home-header">
+    <h1>我的单词书</h1>
+    <p class="home-sub">记录单词，随时复习</p>
+  </header>
+
+  <div class="menu-grid">
+    <a class="menu-card glass-card" href="vocab.html">
+      <div class="menu-title">我的单词书</div>
+      <div class="menu-desc">管理本地词库</div>
+    </a>
+    <a class="menu-card glass-card" href="review.html" id="reviewEntry">
+      <div class="menu-title">复习</div>
+      <div class="menu-desc">选个模式开始</div>
+    </a>
+  </div>
+
+  <!-- 复习模式选择弹层 -->
+  <div class="mode-mask" id="modeMask" hidden>
+    <div class="mode-sheet">
+      <div class="mode-title">选择复习模式</div>
+      <button class="mode-btn" data-mode="zh2en">
+        <span class="mode-name">中文 → 英文</span>
+        <span class="mode-sub">看中文，回忆英文</span>
+      </button>
+      <button class="mode-btn" data-mode="en2zh">
+        <span class="mode-name">英文 → 中文</span>
+        <span class="mode-sub">看英文，回忆中文</span>
+      </button>
+      <button class="mode-cancel" id="modeCancel">取消</button>
+    </div>
+  </div>
+
+  <script>
+    const mask = document.getElementById('modeMask');
+    const reviewEntry = document.getElementById('reviewEntry');
+
+    function openMode(e) {
+      e.preventDefault();
+      mask.hidden = false;
+      requestAnimationFrame(() => mask.classList.add('show'));
+    }
+
+    function closeMode() {
+      mask.classList.remove('show');
+      setTimeout(() => { mask.hidden = true; }, 180);
+    }
+
+    // 关键：模式同时写进 sessionStorage，页面跳转只带路径，避免某些 WebView 丢查询参数
+    function startReview(mode) {
+      if (mode !== 'en2zh' && mode !== 'zh2en') mode = 'zh2en';
+      try { sessionStorage.setItem('reviewMode', mode); } catch (e) {}
+      location.href = 'review.html?mode=' + encodeURIComponent(mode);
+    }
+
+    reviewEntry.addEventListener('click', openMode);
+    document.getElementById('modeCancel').addEventListener('click', closeMode);
+
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => startReview(btn.dataset.mode));
+    });
+
+    // 点遮罩空白处关闭
+    mask.addEventListener('click', e => {
+      if (e.target === mask) closeMode();
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && !mask.hidden) closeMode();
+    });
+  </script>
+
+</body>
+</html>
