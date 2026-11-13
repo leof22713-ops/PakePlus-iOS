@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>我的单词书</title>
+  <link rel="stylesheet" href="css/style.css?v=6">
+  <style>
+    /* 卡片列表专属样式 */
+    .word-card {
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .card-header {
+      padding: 12px 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      background: #fcfcfc;
+      border-bottom: 1px solid transparent;
+      transition: background 0.2s;
+    }
+    .card-header:active {
+      background: #f0f0f0;
+    }
+    .card-header.open {
+      border-bottom-color: #e0e0e0;
+    }
+    .word-main {
+      font-weight: 500;
+      font-size: 16px;
+      display: flex;
+      gap: 10px;
+    }
+    .word-eng { color: #333; }
+    .word-chi { color: #666; }
+    .word-study-badge {
+      font-size: 12px;
+      background: #e3f2fd;
+      color: #1976d2;
+      padding: 2px 6px;
+      border-radius: 10px;
+    }
+    
+    /* 展开的详情区 */
+    .card-detail {
+      padding: 15px;
+      background: #fff;
+      display: none;
+    }
+    .card-detail.show {
+      display: block;
+    }
+    .detail-row {
+      margin-bottom: 10px;
+      font-size: 13px;
+      color: #555;
+      display: flex;
+      align-items: center;
+    }
+    .detail-label {
+      width: 80px;
+      color: #888;
+    }
+    .detail-input {
+      flex: 1;
+      padding: 6px 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .detail-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+      padding-top: 15px;
+      border-top: 1px dashed #eee;
+    }
+    .btn-sm {
+      padding: 6px 12px;
+      font-size: 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      border: none;
+      flex: 1;
+    }
+    .btn-edit-sm { background: #e3f2fd; color: #1976d2; }
+    .btn-del-sm { background: #ffebee; color: #d32f2f; }
+    .btn-save-sm { background: #4caf50; color: #fff; }
+    .btn-cancel-sm { background: #f5f5f5; color: #333; }
+  </style>
+</head>
+<body class="page-bg">
+
+  <a class="back-link" href="index.html">← 返回主页</a>
+
+  <main class="panel">
+  <h1>我的词库</h1>
+  <div id="tip">初始化中...</div>
+
+  <div class="input-row" style="margin-bottom: 20px;">
+    <input id="eng" type="text" placeholder="ENG 英文">
+    <input id="chi" type="text" placeholder="CHI 中文释义">
+    <button id="btnAdd" class="btn-add">插入</button>
+    <button id="btnRefresh" class="btn-normal">刷新</button>
+    <button id="btnExport" class="btn-normal">导出</button>
+    
+    <label class="btn-normal" style="cursor: pointer; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #ccc; border-radius: 4px; background: #f8f9fa;">
+      导入
+      <input type="file" id="btnImport" accept=".json" style="display: none;">
+    </label>
+  </div>
+
+  <div id="list"></div>
+  </main>
+
+  <script src="js/db.js"></script>
+  <script>
+    let editingId = null;    // 当前正在编辑的行 ID
+    let expandedId = null;   // 当前展开的行 ID
+    const tipDom = document.getElementById('tip');
+    const listDom = document.getElementById('list');
+
+    // ===== 初始化 =====
+    (async function init(){
+      try {
+        await AppDB.init();
+        tipDom.innerText = '数据已就绪';
+        renderList();
+      } catch (e) {
+        tipDom.innerText = '初始化失败：' + e.message;
+        tipDom.classList.add('tip-error');
+      }
+    })();
+
+    // ===== 新增 =====
+    document.getElementById('btnAdd').onclick = () => {
+      const engVal = document.getElementById('eng').value.trim();
+      const chiVal = document.getElementById('chi').value.trim();
+      if (!engVal || !chiVal) return;
+      
+      AppDB.add(engVal, chiVal);
+      document.getElementById('eng').value = '';
+      document.getElementById('chi').value = '';
+      renderList();
+    };
+
+    // ===== 删除 =====
+    window.delRow = function (event, id) {
+      event.stopPropagation(); // 阻止触发卡片的展开/折叠
+      if (!confirm('确定删除这条单词吗？')) return;
+      AppDB.del(id);
+      if (editingId === id) editingId = null;
+      if (expandedId === id) expandedId = null;
+      renderList();
+    };
+
+    // ===== 切换展开/折叠 =====
+    window.toggleExpand = function(id) {
+      // 如果当前正在编辑，不允许折叠
+      if (editingId === id) return; 
+      
+      if (expandedId === id) {
+        expandedId = null;
+      } else {
+        expandedId = id;
+      }
+      renderList();
+    };
+
+    // ===== 进入编辑态 =====
+    window.startEdit = function (event, id) {
+      event.stopPropagation();
+      editingId = id;
+      expandedId = id;
+      renderList();
+    };
+
+    // ===== 取消编辑 =====
+    window.cancelEdit = function (event, id) {
+      event.stopPropagation();
+      editingId = null;
+      renderList();
+    };
+
+    // ===== 保存编辑（包含熟练度） =====
+    window.saveEdit = function (event, id) {
+      event.stopPropagation();
+      const engInput = document.getElementById('eng-input-' + id);
+      const chiInput = document.getElementById('chi-input-' + id);
+      const studyInput = document.getElementById('study-input-' + id);
+      
+      const engVal = engInput.value.trim();
+      const chiVal = chiInput.value.trim();
+      const studyVal = studyInput.value.trim();
+
+      if (!engVal || !chiVal) {
+        alert('英文和中文都不能为空');
+        return;
+      }
+      
+      // 调用升级后的 update 方法，传入熟练度
+      AppDB.update(id, engVal, chiVal, studyVal);
+      editingId = null;
+      renderList();
+      tipDom.innerText = '已保存修改';
+    };
+
+    function escapeHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // ===== 渲染卡片列表 =====
+    function renderList() {
+      const rows = AppDB.getAll().sort((a, b) => a.id - b.id);
+      
+      if (!rows || rows.length === 0) {
+        listDom.innerHTML = '<p>暂无单词数据</p>';
+        return;
+      }
+
+      let html = '';
+      rows.forEach(r => {
+        const id = r.id;
+        const isExpanded = expandedId === id;
+        const isEditing = editingId === id;
+
+        // 格式化下次复习时间
+        let nextReviewStr = '立刻复习';
+        if (r.nextReviewTime > 0) {
+          nextReviewStr = new Date(r.nextReviewTime).toLocaleString(undefined, {
+            month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+          });
+        }
+
+        html += `
+        <div class="word-card">
+          <!-- 卡片头部：点击展开 -->
+          <div class="card-header ${isExpanded ? 'open' : ''}" onclick="toggleExpand(${id})">
+            <div class="word-main">
+              <span class="word-eng">${escapeHtml(r.eng)}</span>
+              <span class="word-chi">${escapeHtml(r.chi)}</span>
+            </div>
+            <div class="word-study-badge">熟练度: ${r.studyTime || 0}</div>
+          </div>
+
+          <!-- 卡片详情：展开后显示 -->
+          <div class="card-detail ${isExpanded ? 'show' : ''}">
+            <div class="detail-row">
+              <span class="detail-label">英文 ENG</span>
+              ${isEditing 
+                ? `<input class="detail-input" id="eng-input-${id}" type="text" value="${escapeHtml(r.eng)}" onclick="event.stopPropagation()">` 
+                : `<span>${escapeHtml(r.eng)}</span>`}
+            </div>
+            
+            <div class="detail-row">
+              <span class="detail-label">中文 CHI</span>
+              ${isEditing 
+                ? `<input class="detail-input" id="chi-input-${id}" type="text" value="${escapeHtml(r.chi)}" onclick="event.stopPropagation()">` 
+                : `<span>${escapeHtml(r.chi)}</span>`}
+            </div>
+
+            <div class="detail-row">
+              <span class="detail-label">熟练度</span>
+              ${isEditing 
+                ? `<input class="detail-input" id="study-input-${id}" type="number" min="0" value="${r.studyTime || 0}" onclick="event.stopPropagation()">` 
+                : `<span>${r.studyTime || 0}</span>`}
+            </div>
+
+            <div class="detail-row">
+              <span class="detail-label">下次复习</span>
+              <span>${nextReviewStr}</span>
+            </div>
+
+            <div class="detail-row">
+              <span class="detail-label">创建时间</span>
+              <span>${r.createTime}</span>
+            </div>
+
+            <div class="detail-actions">
+              ${isEditing 
+                ? `<button class="btn-sm btn-save-sm" onclick="saveEdit(event, ${id})">保存</button>
+                   <button class="btn-sm btn-cancel-sm" onclick="cancelEdit(event, ${id})">取消</button>`
+                : `<button class="btn-sm btn-edit-sm" onclick="startEdit(event, ${id})">编辑</button>
+                   <button class="btn-sm btn-del-sm" onclick="delRow(event, ${id})">删除</button>`
+              }
+            </div>
+          </div>
+        </div>`;
+      });
+      
+      listDom.innerHTML = html;
+    }
+
+    document.getElementById('btnRefresh').onclick = renderList;
+
+    // ===== 导出 =====
+    document.getElementById('btnExport').onclick = () => {
+      const dataStr = AppDB.exportJSON();
+      const blob = new Blob([dataStr], { type: "application/json" });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'vocab_backup.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      tipDom.innerText = '导出成功';
+    };
+
+    // ===== 导入 =====
+    document.getElementById('btnImport').onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      tipDom.innerText = '导入中...';
+      
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const result = AppDB.importJSON(event.target.result);
+          renderList();
+          tipDom.innerText = `导入完成：仅新增了 ${result.insertCount} 条新词`;
+        } catch (err) {
+          tipDom.innerText = '导入失败：' + err.message;
+          tipDom.classList.add('tip-error');
+        }
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    };
+  </script>
+</body>
+</html>
