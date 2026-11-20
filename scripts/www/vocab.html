@@ -219,7 +219,7 @@
 
     // ===== 渲染卡片列表 =====
     function renderList() {
-      const rows = AppDB.getAll().sort((a, b) => a.id - b.id);
+      const rows = AppDB.getAll().sort((a, b) => b.id - a.id);
       
       if (!rows || rows.length === 0) {
         listDom.innerHTML = '<p>暂无单词数据</p>';
